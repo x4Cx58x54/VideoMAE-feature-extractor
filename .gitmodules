@@ -1,3 +1,4 @@
 [submodule "VideoMAE"]
 	path = VideoMAE
 	url = https://github.com/MCG-NJU/VideoMAE.git
+	ignore = dirty
