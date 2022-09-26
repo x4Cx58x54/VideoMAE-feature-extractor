@@ -33,3 +33,23 @@ Finally, recursively clone this repository.
 ## Configure and run
 
 Modify data, device, model, and sampling variables in `feature_extraction.py` according to you setting and run this script. Videos are read from `DATA_ROOT/VIDEO_LIST_PATH_i+EXT_NAME`, and features are written to `OUTPUT_DIR/VIDEO_LIST_PATH_i.pkl`, with shape `clip_num * features_dim`.
+
+Example:
+
+```
+DATA_ROOT
+├── 001.mp4
+├── 002.mp4
+├── 003.mp4
+└── 004.mp4
+```
+
+In text file `VIDEO_LIST_PATH` (trailing newline is ok):
+```
+001
+002
+003
+004
+```
+
+This script splits the video list into equal parts and feed into each device respectively. `tqdm` progress bar is printed to the terminal only for the first process for brevity.

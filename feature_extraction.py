@@ -36,11 +36,11 @@ OUTPUT_DIR = 'data/features'
 # Model-specific data configurations
 FRAME_WIDTH: int = 224 # decord argument, -1 for unchanged
 FRAME_HEIGHT: int = 224 # decord argument, -1 for unchanged
-CLIP_LEN: int = 16
+CLIP_LEN: int = 16 # frame number a clip contains
 
 # Other sampling strategy configurations
 ANCHOR_MODE: Literal['mid', 'start', 'end'] = 'mid'
-SAMPLING_FPS: int = 5
+SAMPLING_FPS: int = 5 # equals to FPS of result features/clips
 FRAME_STRIDE: float = 1/25
 
 
