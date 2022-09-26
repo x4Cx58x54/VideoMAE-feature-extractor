@@ -15,11 +15,13 @@ from typing import List, Callable, Literal
 import decord
 from tqdm import tqdm
 import numpy as np
+import einops
 
 
 # Device configurations
 CUDA_VISIBLE_DEVICES_LIST: List[int] = [8, 9]
 BATCH_SIZE: int = 16 # A minibatch contains BATCH_SIZE clips
+DECORD_NUM_THREADS: int = 0
 
 # Model configurations
 MODEL_FN: Callable = VideoMAE.modeling_finetune.vit_large_patch16_224
@@ -32,8 +34,8 @@ VIDEO_LIST_PATH = 'data/video_list_all.txt' # video file name without extension
 OUTPUT_DIR = 'data/features'
 
 # Model-specific data configurations
-FRAME_WIDTH: int = 224
-FRAME_HEIGHT: int = 224
+FRAME_WIDTH: int = 224 # decord argument, -1 for unchanged
+FRAME_HEIGHT: int = 224 # decord argument, -1 for unchanged
 CLIP_LEN: int = 16
 
 # Other sampling strategy configurations
@@ -170,13 +172,15 @@ class VideoFrames:
         ids_end = min((idx + 1) * self.batch_size, len(self.clip_sampler))
         ids_list = [self.sec_to_indices(self.clip_sampler[i])
                     for i in range(ids_start, ids_end)]
-        # for i in range(ids_start, ids_end):
-        #     ids_list.append(self.sec_to_indices(self.clip_sampler[i]))
-        frames = self.videoreader.get_batch(ids_list).permute(0, 3, 1, 2)/255
-        # frames is a [batchsize*clip_len, 3, width, height] float pytorch tensor.
-        frames = self.transforms(frames)
-        frames = torch.stack(frames.split(self.clip_len)).permute(0, 2, 1, 3, 4)
-        frames = frames.contiguous()
+        frames = self.videoreader.get_batch(ids_list)/255.0
+        frames = einops.rearrange(
+            frames,'(B clip_len) H W C -> (B clip_len) C H W',
+            clip_len=self.clip_len
+        )
+        if self.transforms is not None:
+            frames = self.transforms(frames)
+        frames = torch.stack(frames.split(self.clip_len))
+        frames = einops.rearrange(frames, 'B clip_len C H W -> B C clip_len H W')
         return frames
 
 def get_video_lists(video_list_path, num_splits):
@@ -230,7 +234,8 @@ def extract_features_worker(rank, world_size, video_lists):
             batch_size=BATCH_SIZE,
             width=FRAME_WIDTH, height=FRAME_HEIGHT,
             clip_len=CLIP_LEN, anchor_mode=ANCHOR_MODE,
-            sampling_fps=SAMPLING_FPS, frame_stride=FRAME_STRIDE
+            sampling_fps=SAMPLING_FPS, frame_stride=FRAME_STRIDE,
+            num_threads=DECORD_NUM_THREADS
         )
         features = [] # buffer
         vf_range = range(len(vf))
@@ -248,6 +253,7 @@ def extract_features_worker(rank, world_size, video_lists):
             pickle.dump(features, f)
         if rank == 0:
             print(f'feature shape {features.shape}, saved at {save_path}')
+    print(f'Rank {rank}:: done.')
 
 def extract_features_ddp():
     os.environ['MASTER_ADDR'] = 'localhost'
@@ -263,9 +269,29 @@ if __name__ == '__main__':
     os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(map(str, CUDA_VISIBLE_DEVICES_LIST))
     os.environ['DECORD_EOF_RETRY_MAX'] = '65536'
 
+    # ClipSampler example
     # np.set_printoptions(linewidth=10000, threshold=10000)
     # cs = ClipSampler(clip_len=16, anchor=7, fps=5, frame_stride=1/25,
     #     sec_start=0, sec_end=1.1)
     # print(cs.indices)
+
+    # VideoFrames example, need PyAv as dependency
+    # from torchvision.io import write_video
+    # vf = VideoFrames(
+    #     'data/videos/example.mp4', batch_size=16,
+    #     width=480, height=360, clip_len=16, anchor_mode='mid',
+    #     sampling_fps=5, frame_stride=1/25,
+    #     transforms=None, num_threads=4
+    # )
+    # test_output_dir = Path('data/test_output')
+    # test_output_dir.mkdir(exist_ok=True)
+    # clips = einops.rearrange(vf[2], 'B C clip_len H W -> B clip_len H W C')
+    # clips = torch.unbind(clips, dim=0)
+    # for i, clip in enumerate(clips):
+    #     clip = (clip*255.0).to(dtype=torch.uint8)
+    #     save_path = str(test_output_dir/f'{i:03d}.mp4')
+    #     print(f'{clip.shape} {clip.dtype} saved to {save_path}.')
+    #     write_video(save_path, clip, fps=5)
+
 
     extract_features_ddp()
