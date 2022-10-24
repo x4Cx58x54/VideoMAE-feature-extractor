@@ -1,7 +1,8 @@
 import torch
 from torch.nn.parallel import DistributedDataParallel as DDP
 import torch.distributed as dist
-import torch.multiprocessing
+from torch.multiprocessing.spawn import spawn
+from torch.cuda.amp.autocast_mode import autocast
 from torchvision import transforms as T
 
 import VideoMAE.modeling_finetune
@@ -242,7 +243,7 @@ def extract_features_worker(rank, world_size, video_lists):
         if rank == 0:
             vf_range = tqdm(vf_range)
         for i in vf_range:
-            with torch.cuda.amp.autocast():
+            with autocast():
                 _ = model(vf[i].to(rank))
 
             features.append(activation['fc_norm'])
@@ -260,7 +261,7 @@ def extract_features_ddp():
     os.environ['MASTER_PORT'] = '29600'
     world_size = len(CUDA_VISIBLE_DEVICES_LIST)
     video_lists = get_video_lists(VIDEO_LIST_PATH, world_size)
-    torch.multiprocessing.spawn(extract_features_worker,
+    spawn(extract_features_worker,
         args=(world_size, video_lists),
         nprocs=world_size,
         join=True)

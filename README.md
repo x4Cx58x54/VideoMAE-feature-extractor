@@ -1,5 +1,7 @@
 # VideoMAE Feature Extractor
 
+This script extracts features using a VideoMAE pretrained model from long videos.
+
 ## Install
 
 Create and activate a new Conda environment:
